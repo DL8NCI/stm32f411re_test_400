@@ -57,6 +57,10 @@
 
 /* Private define ------------------------------------------------------------*/
 
+#define PUSH_BUTTON_Pin GPIO_PIN_13
+#define PUSH_BUTTON_GPIO_Port GPIOC
+#define PUSH_BUTTON_EXTI_IRQn EXTI15_10_IRQn
+
 /* ########################## Assert Selection ############################## */
 /**
   * @brief Uncomment the line below to expanse the "assert_param" macro in the 

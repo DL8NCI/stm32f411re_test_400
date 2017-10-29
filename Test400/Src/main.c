@@ -61,6 +61,7 @@ I2C_HandleTypeDef hi2c1;
 UART_HandleTypeDef huart2;
 
 osThreadId defaultTaskHandle;
+osThreadId PushButtonPressHandle;
 
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
@@ -73,6 +74,7 @@ static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_I2C1_Init(void);
 void StartDefaultTask(void const * argument);
+void onPushButtonPressed(void const * argument);
 
 /* USER CODE BEGIN PFP */
 /* Private function prototypes -----------------------------------------------*/
@@ -131,6 +133,10 @@ int main(void)
   /* definition and creation of defaultTask */
   osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 128);
   defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
+
+  /* definition and creation of PushButtonPress */
+  osThreadDef(PushButtonPress, onPushButtonPressed, osPriorityIdle, 0, 128);
+  PushButtonPressHandle = osThreadCreate(osThread(PushButtonPress), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -263,10 +269,23 @@ static void MX_USART2_UART_Init(void)
 static void MX_GPIO_Init(void)
 {
 
+  GPIO_InitTypeDef GPIO_InitStruct;
+
   /* GPIO Ports Clock Enable */
+  __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOH_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
+
+  /*Configure GPIO pin : PUSH_BUTTON_Pin */
+  GPIO_InitStruct.Pin = PUSH_BUTTON_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(PUSH_BUTTON_GPIO_Port, &GPIO_InitStruct);
+
+  /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI15_10_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
 
 }
 
@@ -285,6 +304,29 @@ void StartDefaultTask(void const * argument)
     osDelay(1);
   }
   /* USER CODE END 5 */ 
+}
+
+/* onPushButtonPressed function */
+void onPushButtonPressed(void const * argument)
+{
+  /* USER CODE BEGIN onPushButtonPressed */
+	uint32_t ulEventsToProcess;
+	char c;
+  /* Infinite loop */
+	ulTaskNotifyTake( pdTRUE, 0 );
+  for(;;)
+  {
+	  ulEventsToProcess = ulTaskNotifyTake( pdTRUE, 10 );
+	  if( ulEventsToProcess != 0 ) {
+		  while (ulEventsToProcess>0) {
+			  c = 'x';
+			  HAL_UART_Transmit(&huart2, &c, 1, 0);
+			  ulEventsToProcess--;
+		  	  }
+	  	  }
+    osDelay(1);
+  }
+  /* USER CODE END onPushButtonPressed */
 }
 
 /**

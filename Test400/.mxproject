@@ -1,7 +1,7 @@
 [PreviousGenFiles]
-HeaderPath=D:/Users/DL8NCI/Documents/Entwicklung/eclipse/STM32Workbench/Test400/Inc
+HeaderPath=D:/Users/DL8NCI/Documents/Entwicklung/git/stm32f411re_test_400/Test400/Inc
 HeaderFiles=FreeRTOSConfig.h;stm32f4xx_it.h;stm32f4xx_hal_conf.h;main.h;
-SourcePath=D:/Users/DL8NCI/Documents/Entwicklung/eclipse/STM32Workbench/Test400/Src
+SourcePath=D:/Users/DL8NCI/Documents/Entwicklung/git/stm32f411re_test_400/Test400/Src
 SourceFiles=freertos.c;stm32f4xx_it.c;stm32f4xx_hal_msp.c;stm32f4xx_hal_timebase_TIM.c;main.c;
 
 [PreviousLibFiles]
