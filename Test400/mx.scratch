@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Project>
-<ProjectName>D:\Users\DL8NCI\Documents\Entwicklung\git\stm32f411re_test_400\Test400\\Test400</ProjectName>
+<ProjectName>C:\Users\DL8NCI\Documents\Entwicklung\git\stm32f411re_test_400\Test400\\Test400</ProjectName>
 <CMSIS>..\Drivers\CMSIS</CMSIS>
 <HAL_Driver>C:\Users\DL8NCI\STM32Cube\Repository\STM32Cube_FW_F4_V1.17.0\Drivers\CMSIS</HAL_Driver>
 

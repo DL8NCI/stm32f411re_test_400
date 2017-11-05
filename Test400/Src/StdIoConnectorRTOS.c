@@ -9,93 +9,115 @@
 #include <sys/errno.h>
 #include <stdlib.h>
 #include <string.h>
+#include "cmsis_os.h"
 
 #include <StdIoConnectorRTOS.h>
 
 
-#include "cmsis_os.h"
+#define EG_SIOC_BUFFER_FREE 1
 
-// type declarations
+
 struct TTxQueueItem {
 	uint8_t *buff;
 	int len;
-	int inUse;
 	};
 
-// variable declarations
+
 static UART_HandleTypeDef *_huart;
 static UART_HandleTypeDef *_huart_diag;
 static osMessageQId QuTxQueueHandle;
-osThreadId TsSendCharactersHandle;
-volatile static struct TTxQueueItem _qi;
+static osThreadId TsSendCharactersHandle;
+static struct TTxQueueItem _qi;
 static char clr_home[7] = "\e[2J\e[H";
+static EventGroupHandle_t EgSIOCHandle;
 
-// function prototypes
+
 void TsSendCharactersImpl(void const * argument);
 void UART_WaitOnFlag_Simple(UART_HandleTypeDef *huart, uint32_t Flag, FlagStatus Status);
 HAL_StatusTypeDef HAL_UART_Transmit_Simple(UART_HandleTypeDef *huart, uint8_t *pData, uint16_t Size);
 
 
-// Implementation
 void SIOC_Init(UART_HandleTypeDef *huart) {
-	// clear buffer
+
 	_huart = huart;
 	_qi.buff = NULL;
-	_qi.inUse = 0; // 0:free, 1:in use, 2:can be freed
 
-	// clear screen
 	HAL_UART_Transmit(_huart, &clr_home, 7, HAL_MAX_DELAY);
 
-	// make task and queue
 	xTaskCreate(
-			(TaskFunction_t)TsSendCharactersImpl,
-			"SendCharacters",
-			128,
-			NULL,
-			4,
-			&TsSendCharactersHandle);
+		(TaskFunction_t)TsSendCharactersImpl,
+		"SendCharacters",
+		128,
+		NULL,
+		4,
+		&TsSendCharactersHandle);
 
-	QuTxQueueHandle = xQueueCreate(
-			32,
-			sizeof(struct TTxQueueItem));
+	QuTxQueueHandle = xQueueCreate( 32, sizeof(struct TTxQueueItem));
 
+	EgSIOCHandle = xEventGroupCreate();
+	xEventGroupClearBits(EgSIOCHandle, EG_SIOC_BUFFER_FREE);
 	}
+
 
 void SIOC_InitDiag(UART_HandleTypeDef *huart) {
 	_huart_diag = huart;
 
-	// clear screen
 	SIOC_SendDiagPort(&clr_home);
 	SIOC_SendDiagPort("Diag started\r\n");
-
 	}
+
 
 void TsSendCharactersImpl(void const * argument) {
 
+	HAL_StatusTypeDef rc;
+
 	for(;;)  {
-		if (_qi.inUse==2) {
+
+		if (xQueueReceive(QuTxQueueHandle, &_qi, 10)) {
+			rc = HAL_UART_Transmit_DMA(_huart, _qi.buff, _qi.len);
+			configASSERT( rc==HAL_OK );
+
+			EventBits_t b = xEventGroupWaitBits(
+				EgSIOCHandle,
+				EG_SIOC_BUFFER_FREE,
+				pdTRUE,
+				pdFALSE,
+				portMAX_DELAY );
+
 			vPortFree(_qi.buff);
 			_qi.buff = NULL;
 			_qi.len = 0;
-			_qi.inUse = 0;
-			}
-
-		if (_qi.inUse==0) {
-			if (xQueueReceive(QuTxQueueHandle, &_qi, 10)) {
-				_qi.inUse = 1;
-				HAL_StatusTypeDef rc = HAL_UART_Transmit_IT(_huart, _qi.buff, _qi.len);
-				configASSERT( rc==HAL_OK );
-				}
 			}
 		}
 	}
 
 
-void SIOC_TxCpltCallback(UART_HandleTypeDef *huart) {
+void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
+
+	BaseType_t xHigherPriorityTaskWoken;
+
 	if (huart!=_huart) return;
-	_qi.inUse = 2;
+
+	BaseType_t rc = xEventGroupSetBitsFromISR(
+		EgSIOCHandle,
+		EG_SIOC_BUFFER_FREE,
+		&xHigherPriorityTaskWoken );
+
+	configASSERT( rc !=  pdFAIL );
+	portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
 	}
 
+
+void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart) {
+	if (huart!=_huart) return;
+	configASSERT( 1==1 );
+	}
+
+/*
+void HAL_UART_TxHalfCpltCallback(UART_HandleTypeDef *huart) {
+	if (huart!=_huart) return;
+	}
+*/
 
 int _write(int file, char *data, int len) {
 	struct TTxQueueItem qi;
@@ -107,7 +129,6 @@ int _write(int file, char *data, int len) {
 
 	qi.buff = pvPortMalloc(len);
 	qi.len = len;
-	qi.inUse = 0; // don't care
 	memcpy(qi.buff,data,len);
 
 	if( xQueueSendToBack( QuTxQueueHandle, &qi, ( TickType_t ) 1000 ) != pdPASS ) {
