@@ -57,9 +57,8 @@
 
 /* Private define ------------------------------------------------------------*/
 
-#define PUSH_BUTTON_Pin GPIO_PIN_13
-#define PUSH_BUTTON_GPIO_Port GPIOC
-#define PUSH_BUTTON_EXTI_IRQn EXTI15_10_IRQn
+#define LED_Pin GPIO_PIN_5
+#define LED_GPIO_Port GPIOA
 
 /* ########################## Assert Selection ############################## */
 /**
@@ -69,6 +68,9 @@
 /* #define USE_FULL_ASSERT    1U */
 
 /* USER CODE BEGIN Private defines */
+
+#define EG_I2C_CMD_SENT	     ( 1 << 0 )
+#define EG_I2C_DATA_RECEIVED ( 1 << 1 )
 
 /* USER CODE END Private defines */
 
