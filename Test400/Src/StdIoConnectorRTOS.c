@@ -141,7 +141,7 @@ void SIOC_SendDiagPortUInt32(uint32_t x) {
 		if (i==0) break;
 		}
 	c[i] = ' ';
-	HAL_UART_Transmit_Simple(_huart_diag, &c[i], l);
+	HAL_UART_Transmit_Simple(_huart_diag, &c[i], l+1);
 	}
 
 HAL_StatusTypeDef HAL_UART_Transmit_Simple(UART_HandleTypeDef *huart, uint8_t *pData, uint16_t Size) {

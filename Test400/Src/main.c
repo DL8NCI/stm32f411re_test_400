@@ -191,7 +191,7 @@ int main(void)
   T0raw[2]=0;
 
   EgMainHandle = xEventGroupCreate();
-  xEventGroupClearBits(&EgMainHandle, EG_I2C_CMD_SENT | EG_I2C_DATA_RECEIVED);
+  xEventGroupClearBits(EgMainHandle, EG_I2C_CMD_SENT | EG_I2C_DATA_RECEIVED);
 
   /* USER CODE END RTOS_QUEUES */
  
@@ -403,29 +403,26 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 	}
 
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
-	SIOC_SendDiagPort("IRQ: TxCplt\r\n");
 	SIOC_TxCpltCallback(huart);
 	}
 
 void HAL_I2C_MasterTxCpltCallback(I2C_HandleTypeDef *hi2c) {
-	SIOC_SendDiagPort("IRQ: HAL_I2C_MasterTxCpltCallback\r\n");
 	if (hi2c->Instance != I2C2) return;
 
 	BaseType_t xHigherPriorityTaskWoken, rc;
 	xHigherPriorityTaskWoken = pdFALSE;
 
-	rc = xEventGroupSetBitsFromISR(&EgMainHandle, EG_I2C_CMD_SENT, &xHigherPriorityTaskWoken);
+	rc = xEventGroupSetBitsFromISR(EgMainHandle, EG_I2C_CMD_SENT, &xHigherPriorityTaskWoken);
 	if (rc!=pdFAIL) portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
 
 	}
 void HAL_I2C_MasterRxCpltCallback(I2C_HandleTypeDef *hi2c) {
-	SIOC_SendDiagPort("IRQ: HAL_I2C_MasterRxCpltCallback\r\n");
 	if (hi2c->Instance != I2C2) return;
 
 	BaseType_t xHigherPriorityTaskWoken, rc;
 	xHigherPriorityTaskWoken = pdFALSE;
 
-	rc = xEventGroupSetBitsFromISR(&EgMainHandle, EG_I2C_DATA_RECEIVED, &xHigherPriorityTaskWoken);
+	rc = xEventGroupSetBitsFromISR(EgMainHandle, EG_I2C_DATA_RECEIVED, &xHigherPriorityTaskWoken);
 	if (rc!=pdFAIL) portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
 	}
 
@@ -487,32 +484,24 @@ void TsReadHIH8000(void const * argument)
 	  /* Infinite loop */
 	for(;;) {
 		ulTaskNotifyTake( pdTRUE, portMAX_DELAY );
-		SIOC_SendDiagPort("TsReadHIH8000 started\r\n");
 
-		xEventGroupClearBits(&EgMainHandle, EG_I2C_CMD_SENT | EG_I2C_DATA_RECEIVED);
-		SIOC_SendDiagPort("TsReadHIH8000: xEventGroupClearBits executed\r\n");
+		xEventGroupClearBits(EgMainHandle, EG_I2C_CMD_SENT | EG_I2C_DATA_RECEIVED);
 
 		b[0] = 0x00;
 		rc = HAL_I2C_Master_Transmit_IT(&hi2c2, 0x4e, &b, 1);
 //		rc = HAL_I2C_Master_Transmit(&hi2c2, 0x4e, &b, 1, HAL_MAX_DELAY);
 		configASSERT( rc == HAL_OK );
-		SIOC_SendDiagPort("TsReadHIH8000: HAL_I2C_Master_Transmit_IT executed\r\n");
 
-		bits = xEventGroupWaitBits(&EgMainHandle, EG_I2C_CMD_SENT, pdTRUE, pdFALSE, 1000);
-		SIOC_SendDiagPort("TsReadHIH8000: xEventGroupWaitBits received/timed out\r\n");
+		bits = xEventGroupWaitBits(EgMainHandle, EG_I2C_CMD_SENT, pdTRUE, pdFALSE, 1000);
 		configASSERT((bits & EG_I2C_CMD_SENT)!=0);
-		SIOC_SendDiagPort("TsReadHIH8000: xEventGroupWaitBits received\r\n");
 		vTaskDelay(100);
 
 		rc = HAL_I2C_Master_Receive_IT(&hi2c2, 0x4f, &b[0], 4);
 //		rc = HAL_I2C_Master_Receive(&hi2c2, 0x4f, &b[0], 4, HAL_MAX_DELAY);
 		configASSERT( rc == HAL_OK );
 //					printf("HAL_I2C_Master_Receive_IT - ok\r\n");
-		bits = EG_I2C_DATA_RECEIVED & xEventGroupWaitBits(&EgMainHandle, EG_I2C_DATA_RECEIVED, pdTRUE, pdFALSE, 1000);
+		bits = EG_I2C_DATA_RECEIVED & xEventGroupWaitBits(EgMainHandle, EG_I2C_DATA_RECEIVED, pdTRUE, pdFALSE, 1000);
 		configASSERT(bits!=0);
-//		printf("EG_I2C_DATA_RECEIVED - ok\r\n");
-
-						//	printf("HAL8000: %02x %02x %02x %02x\r\n", r[0], r[1], r[2], r[3]);
 
 		humidity = (((uint16_t)b[0] & 0x003f) << 8) | (uint16_t)b[1];
 		humidity = humidity/163.820;;
@@ -538,7 +527,6 @@ void TsPrintSomeStats(void const * argument)
 	for(;;) {
 
 		ulTaskNotifyTake( pdTRUE, portMAX_DELAY );
-		SIOC_SendDiagPort("TsPrintSomeStats started\r\n");
 
 		as = uxTaskGetNumberOfTasks();
 		tsa = pvPortMalloc(as*sizeof(TaskStatus_t));
@@ -609,7 +597,6 @@ void Callback01(void const * argument)
 {
   /* USER CODE BEGIN Callback01 */
 	HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
-	SIOC_SendDiagPort("Callback01 started\r\n");
 
 	xTaskNotifyGive(PrintSomeStatsHandle);
 	xTaskNotifyGive(ReadHIH8000Handle);
