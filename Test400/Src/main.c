@@ -53,6 +53,8 @@
 
 /* USER CODE BEGIN Includes */
 #include <StdIoConnectorRTOS.h>
+#include <HIH8000.h>
+#include "RTOSStatistics.h"
 #include "task.h"
 #include "event_groups.h"
 /* USER CODE END Includes */
@@ -67,15 +69,13 @@ UART_HandleTypeDef huart2;
 DMA_HandleTypeDef hdma_usart2_tx;
 
 osThreadId defaultTaskHandle;
-osThreadId ReadHIH8000Handle;
-osThreadId PrintSomeStatsHandle;
 osThreadId ReadMLX90615Handle;
 osTimerId myTimer01Handle;
 
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
 
-EventGroupHandle_t EgMainHandle;
+//EventGroupHandle_t EgMainHandle;
 
 uint16_t cntr;
 //double T0;
@@ -93,16 +93,14 @@ static void MX_I2C2_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_TIM2_Init(void);
 void StartDefaultTask(void const * argument);
-void TsReadHIH8000(void const * argument);
-void TsPrintSomeStats(void const * argument);
 void TsReadMLX90615(void const * argument);
 void Callback01(void const * argument);
 
 /* USER CODE BEGIN PFP */
 /* Private function prototypes -----------------------------------------------*/
 void vAssertCalled( const char *pcFile, uint32_t ulLine );
-unsigned long getRunTimeCounterValue(void);
-void configureTimerForRunTimeStats(void);
+//unsigned long getRunTimeCounterValue(void);
+//void configureTimerForRunTimeStats(void);
 void vApplicationMallocFailedHook(void);
 void vApplicationStackOverflowHook(TaskHandle_t xTask, signed char *pcTaskName);
 /* USER CODE END PFP */
@@ -168,14 +166,6 @@ int main(void)
   osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 256);
   defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
 
-  /* definition and creation of ReadHIH8000 */
-  osThreadDef(ReadHIH8000, TsReadHIH8000, osPriorityNormal, 0, 256);
-  ReadHIH8000Handle = osThreadCreate(osThread(ReadHIH8000), NULL);
-
-  /* definition and creation of PrintSomeStats */
-  osThreadDef(PrintSomeStats, TsPrintSomeStats, osPriorityNormal, 0, 256);
-  PrintSomeStatsHandle = osThreadCreate(osThread(PrintSomeStats), NULL);
-
   /* definition and creation of ReadMLX90615 */
   osThreadDef(ReadMLX90615, TsReadMLX90615, osPriorityNormal, 0, 256);
   ReadMLX90615Handle = osThreadCreate(osThread(ReadMLX90615), NULL);
@@ -187,14 +177,12 @@ int main(void)
   /* USER CODE BEGIN RTOS_QUEUES */
   SIOC_InitDiag(&huart1);
   SIOC_Init(&huart2);
-  cntr = 0;
+  HIH8000_Init(&hi2c2);
+  RTOSStatisticsInit(&htim2);
   //T0 = 0.0;
   T0raw[0]=0;
   T0raw[1]=0;
   T0raw[2]=0;
-
-  EgMainHandle = xEventGroupCreate();
-  xEventGroupClearBits(EgMainHandle, EG_I2C_CMD_SENT | EG_I2C_DATA_RECEIVED);
 
   /* USER CODE END RTOS_QUEUES */
  
@@ -421,42 +409,11 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 	}
 
 
-void HAL_I2C_MasterTxCpltCallback(I2C_HandleTypeDef *hi2c) {
-	if (hi2c->Instance != I2C2) return;
-
-	BaseType_t xHigherPriorityTaskWoken, rc;
-	xHigherPriorityTaskWoken = pdFALSE;
-
-	rc = xEventGroupSetBitsFromISR(EgMainHandle, EG_I2C_CMD_SENT, &xHigherPriorityTaskWoken);
-	if (rc!=pdFAIL) portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
-
-	}
-void HAL_I2C_MasterRxCpltCallback(I2C_HandleTypeDef *hi2c) {
-	if (hi2c->Instance != I2C2) return;
-
-	BaseType_t xHigherPriorityTaskWoken, rc;
-	xHigherPriorityTaskWoken = pdFALSE;
-
-	rc = xEventGroupSetBitsFromISR(EgMainHandle, EG_I2C_DATA_RECEIVED, &xHigherPriorityTaskWoken);
-	if (rc!=pdFAIL) portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
-	}
-
-
 void vAssertCalled( const char *pcFile, uint32_t ulLine ) {
 	taskDISABLE_INTERRUPTS();
 	SIOC_SendDiagPort(pcFile);
 	SIOC_SendDiagPortUInt32(ulLine);
 	for( ;; );
-	}
-
-unsigned long getRunTimeCounterValue(void) {
-	uint32_t c = htim2.Instance->CNT;
-	return c;
-	}
-
-void configureTimerForRunTimeStats(void) {
-	HAL_StatusTypeDef rc = HAL_TIM_Base_Start(&htim2);
-	configASSERT( rc == HAL_OK );
 	}
 
 void vApplicationMallocFailedHook(void) {
@@ -478,104 +435,9 @@ void StartDefaultTask(void const * argument)
 
   /* USER CODE BEGIN 5 */
 	for(;;) {
-//		HAL_UART_Receive_IT(&huart2, &rxBuff, 1);
-//		xTimerChdangePeriod(myTimer01Handle,1000,10);
-//		xTimerStart(myTimer01Handle,10);
 		osDelay(1);
 		}
   /* USER CODE END 5 */ 
-}
-
-/* TsReadHIH8000 function */
-void TsReadHIH8000(void const * argument)
-{
-  /* USER CODE BEGIN TsReadHIH8000 */
-
-	uint8_t b[4];
-	double humidity, temperature;
-	EventBits_t bits;
-	HAL_StatusTypeDef rc;
-
-	  /* Infinite loop */
-	for(;;) {
-		ulTaskNotifyTake( pdTRUE, portMAX_DELAY );
-
-		xEventGroupClearBits(EgMainHandle, EG_I2C_CMD_SENT | EG_I2C_DATA_RECEIVED);
-
-		b[0] = 0x00;
-		rc = HAL_I2C_Master_Transmit_IT(&hi2c2, 0x4e, &b, 1);
-//		rc = HAL_I2C_Master_Transmit(&hi2c2, 0x4e, &b, 1, HAL_MAX_DELAY);
-		configASSERT( rc == HAL_OK );
-
-		bits = xEventGroupWaitBits(EgMainHandle, EG_I2C_CMD_SENT, pdTRUE, pdFALSE, 1000);
-		configASSERT((bits & EG_I2C_CMD_SENT)!=0);
-		vTaskDelay(100);
-
-		rc = HAL_I2C_Master_Receive_IT(&hi2c2, 0x4f, &b[0], 4);
-//		rc = HAL_I2C_Master_Receive(&hi2c2, 0x4f, &b[0], 4, HAL_MAX_DELAY);
-		configASSERT( rc == HAL_OK );
-//					printf("HAL_I2C_Master_Receive_IT - ok\r\n");
-		bits = EG_I2C_DATA_RECEIVED & xEventGroupWaitBits(EgMainHandle, EG_I2C_DATA_RECEIVED, pdTRUE, pdFALSE, 1000);
-		configASSERT(bits!=0);
-
-		humidity = (((uint16_t)b[0] & 0x003f) << 8) | (uint16_t)b[1];
-		humidity = humidity/163.820;;
-
-		temperature = ((uint16_t)b[2]<<6) | ((uint16_t)b[3]>>2);
-		temperature = temperature*165.0/16382.0 - 40.0;
-
-		printf("RH = %4.1f %%   T = %4.1f deg\r\n", humidity, temperature);
-
-  }
-  /* USER CODE END TsReadHIH8000 */
-}
-
-/* TsPrintSomeStats function */
-void TsPrintSomeStats(void const * argument)
-{
-  /* USER CODE BEGIN TsPrintSomeStats */
-  /* Infinite loop */
-	TaskStatus_t *tsa;
-	volatile UBaseType_t as, i;
-	unsigned long totalRuntime;
-
-	for(;;) {
-
-		ulTaskNotifyTake( pdTRUE, portMAX_DELAY );
-
-		as = uxTaskGetNumberOfTasks();
-		tsa = pvPortMalloc(as*sizeof(TaskStatus_t));
-
-		as = uxTaskGetSystemState( tsa, as, &totalRuntime);
-
-
-		printf("cntr = %d   tasks=%lu   total runtime = %10.1f s\r\n", cntr, as, (double)totalRuntime/100000.0);
-		cntr++;
-
-		totalRuntime /= 100UL;
-
-		if (totalRuntime == 0) {
-			printf("TNr            Task-Name Stk    Curr Prio    Base Prio      Runtime\r\n");
-			for (i=0; i<as; i++) {
-				printf("%3lu %20s %3hu %12lu %12lu %12lu\r\n", tsa[i].xTaskNumber, tsa[i].pcTaskName, tsa[i].usStackHighWaterMark, tsa[i].uxCurrentPriority, tsa[i].uxBasePriority, tsa[i].ulRunTimeCounter);
-				}
-			}
-		else {
-			printf("TNr            Task-Name Stk    Curr Prio    Base Prio Runtme\r\n");
-			for (i=0; i<as; i++) {
-				printf("%3lu %20s %3hu %12lu %12lu %5.1f%%\r\n", tsa[i].xTaskNumber, tsa[i].pcTaskName, tsa[i].usStackHighWaterMark, tsa[i].uxCurrentPriority, tsa[i].uxBasePriority, (double)tsa[i].ulRunTimeCounter/(double)totalRuntime);
-				}
-			}
-
-
-
-		printf("\r\n");
-
-		vPortFree(tsa);
-
-		osDelay(1);
-		}
-  /* USER CODE END TsPrintSomeStats */
 }
 
 /* TsReadMLX90615 function */
@@ -613,7 +475,7 @@ void Callback01(void const * argument)
   /* USER CODE BEGIN Callback01 */
 	HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
 
-	xTaskNotifyGive(PrintSomeStatsHandle);
+	xTaskNotifyGive(RTOSStatisticsHandle);
 	xTaskNotifyGive(ReadHIH8000Handle);
 
   /* USER CODE END Callback01 */

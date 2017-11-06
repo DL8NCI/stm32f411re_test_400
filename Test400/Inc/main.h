@@ -69,9 +69,6 @@
 
 /* USER CODE BEGIN Private defines */
 
-#define EG_I2C_CMD_SENT	     ( 1 << 0 )
-#define EG_I2C_DATA_RECEIVED ( 1 << 1 )
-
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus
