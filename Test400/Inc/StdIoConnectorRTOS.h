@@ -11,7 +11,7 @@
 #include "stm32f4xx_hal.h"
 
 
-void SIOC_Init(UART_HandleTypeDef *huart);
+void SIOC_Init(UART_HandleTypeDef *huart, osMessageQId *RxQueueHandle);
 void SIOC_TxCpltCallback(UART_HandleTypeDef *huart);
 
 void SIOC_InitDiag(UART_HandleTypeDef *huart);

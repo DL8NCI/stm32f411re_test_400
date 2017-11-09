@@ -74,9 +74,8 @@ osTimerId myTimer01Handle;
 
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
-
-//EventGroupHandle_t EgMainHandle;
-
+osThreadId EchoTaskHandle;
+osMessageQId RxQueueHandle;
 uint16_t cntr;
 //double T0;
 uint8_t T0raw[3];
@@ -98,9 +97,11 @@ void Callback01(void const * argument);
 
 /* USER CODE BEGIN PFP */
 /* Private function prototypes -----------------------------------------------*/
+void EchoTask(void const * argument);
+
+
+
 void vAssertCalled( const char *pcFile, uint32_t ulLine );
-//unsigned long getRunTimeCounterValue(void);
-//void configureTimerForRunTimeStats(void);
 void vApplicationMallocFailedHook(void);
 void vApplicationStackOverflowHook(TaskHandle_t xTask, signed char *pcTaskName);
 /* USER CODE END PFP */
@@ -171,12 +172,23 @@ int main(void)
   ReadMLX90615Handle = osThreadCreate(osThread(ReadMLX90615), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */
+  	  xTaskCreate(
+  			  (TaskFunction_t)EchoTask,
+			  "Console Echo",
+			  128,
+			  NULL,
+			  4,
+			  &EchoTaskHandle);
+
   /* add threads, ... */
   /* USER CODE END RTOS_THREADS */
 
   /* USER CODE BEGIN RTOS_QUEUES */
   SIOC_InitDiag(&huart1);
-  SIOC_Init(&huart2);
+
+  RxQueueHandle = xQueueCreate( 32, sizeof(uint8_t));
+  SIOC_Init(&huart2, RxQueueHandle);
+
   HIH8000_Init(&hi2c2);
   RTOSStatisticsInit(&htim2);
   //T0 = 0.0;
@@ -427,6 +439,51 @@ void vApplicationStackOverflowHook(TaskHandle_t xTask, signed char *pcTaskName) 
 	for(;;) { }
 	}
 
+
+
+void EchoTask(void const * argument) {
+	uint8_t c;
+	uint8_t b[80+3];
+	uint8_t i;
+	uint8_t crlf;
+
+	i=0;
+	crlf = 0; // cr = 1; lf = 2; crlf = 3
+
+	for(;;) {
+
+		if (ulTaskNotifyTake( pdTRUE, 1 )!=0) { // received notification
+			if (crlf==1) {
+				printf("%s\r",b);
+				i=0;
+				crlf=0;
+				}
+			else if (crlf==2) {
+				printf("%s\n",b);
+				i=0;
+				crlf=0;
+				}
+			}
+
+		if (xQueueReceive(RxQueueHandle, &c, 1)) {
+			b[i++]=c;
+			if (i==80) {
+				crlf = 3;
+				b[i]=0;
+				}
+			else if (c==13) {
+				crlf = 1;
+				b[i]=0;
+				}
+			else if (c==10) {
+				crlf = 2;
+				b[i]=0;
+				}
+			}
+		}
+	}
+
+
 /* USER CODE END 4 */
 
 /* StartDefaultTask function */
@@ -477,6 +534,7 @@ void Callback01(void const * argument)
 
 	xTaskNotifyGive(RTOSStatisticsHandle);
 	xTaskNotifyGive(ReadHIH8000Handle);
+	xTaskNotifyGive(EchoTaskHandle);
 
   /* USER CODE END Callback01 */
 }
