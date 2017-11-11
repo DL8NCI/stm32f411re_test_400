@@ -238,6 +238,9 @@ static HAL_StatusTypeDef SIOC_UART_Receive_IT(UART_HandleTypeDef *huart) {
 
 	if(huart->RxState != HAL_UART_STATE_BUSY_RX) return HAL_BUSY;
 	b = (uint8_t)(huart->Instance->DR & (uint8_t)0x00FF);
+
+	HAL_UART_Transmit_Simple(_huart_diag, &b, 1);
+
     rc = xQueueSendToBackFromISR(_RxQueueHandle, &b, &xHigherPriorityTaskWoken);
 
     configASSERT( rc ==  pdPASS );

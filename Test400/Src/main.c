@@ -164,11 +164,11 @@ int main(void)
 
   /* Create the thread(s) */
   /* definition and creation of defaultTask */
-  osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 256);
+  osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 128);
   defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
 
   /* definition and creation of ReadMLX90615 */
-  osThreadDef(ReadMLX90615, TsReadMLX90615, osPriorityNormal, 0, 256);
+  osThreadDef(ReadMLX90615, TsReadMLX90615, osPriorityNormal, 0, 128);
   ReadMLX90615Handle = osThreadCreate(osThread(ReadMLX90615), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */

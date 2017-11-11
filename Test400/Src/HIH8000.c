@@ -37,7 +37,7 @@ BaseType_t HIH8000_Init(I2C_HandleTypeDef *hi2c) {
 	rc = xTaskCreate(
 		(TaskFunction_t)ReadHIH8000Impl,
 		"Read HIH8000",
-		256,
+		196,
 		NULL,
 		4,
 		&ReadHIH8000Handle);
