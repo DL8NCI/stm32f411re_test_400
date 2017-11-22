@@ -66,6 +66,7 @@ TIM_HandleTypeDef htim2;
 
 UART_HandleTypeDef huart1;
 UART_HandleTypeDef huart2;
+UART_HandleTypeDef huart6;
 DMA_HandleTypeDef hdma_usart2_tx;
 
 osThreadId defaultTaskHandle;
@@ -76,11 +77,8 @@ osTimerId myTimer01Handle;
 /* Private variables ---------------------------------------------------------*/
 osThreadId EchoTaskHandle;
 osMessageQId RxQueueHandle;
+SemaphoreHandle_t mtI2C2;
 uint16_t cntr;
-//double T0;
-uint8_t T0raw[3];
-uint8_t Taraw[3];
-uint8_t IRraw[3];
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -91,6 +89,7 @@ static void MX_USART2_UART_Init(void);
 static void MX_I2C2_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_TIM2_Init(void);
+static void MX_USART6_UART_Init(void);
 void StartDefaultTask(void const * argument);
 void TsReadMLX90615(void const * argument);
 void Callback01(void const * argument);
@@ -140,13 +139,15 @@ int main(void)
   MX_I2C2_Init();
   MX_USART1_UART_Init();
   MX_TIM2_Init();
+  MX_USART6_UART_Init();
 
   /* USER CODE BEGIN 2 */
 
   /* USER CODE END 2 */
 
   /* USER CODE BEGIN RTOS_MUTEX */
-  /* add mutexes, ... */
+  mtI2C2 = xSemaphoreCreateMutex();
+  configASSERT( mtI2C2 != NULL);
   /* USER CODE END RTOS_MUTEX */
 
   /* USER CODE BEGIN RTOS_SEMAPHORES */
@@ -191,10 +192,6 @@ int main(void)
 
   HIH8000_Init(&hi2c2);
   RTOSStatisticsInit(&htim2);
-  //T0 = 0.0;
-  T0raw[0]=0;
-  T0raw[1]=0;
-  T0raw[2]=0;
 
   /* USER CODE END RTOS_QUEUES */
  
@@ -362,6 +359,25 @@ static void MX_USART2_UART_Init(void)
 
 }
 
+/* USART6 init function */
+static void MX_USART6_UART_Init(void)
+{
+
+  huart6.Instance = USART6;
+  huart6.Init.BaudRate = 9600;
+  huart6.Init.WordLength = UART_WORDLENGTH_8B;
+  huart6.Init.StopBits = UART_STOPBITS_1;
+  huart6.Init.Parity = UART_PARITY_NONE;
+  huart6.Init.Mode = UART_MODE_RX;
+  huart6.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart6.Init.OverSampling = UART_OVERSAMPLING_16;
+  if (HAL_UART_Init(&huart6) != HAL_OK)
+  {
+    _Error_Handler(__FILE__, __LINE__);
+  }
+
+}
+
 /** 
   * Enable DMA controller clock
   */
@@ -393,6 +409,7 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOH_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
+  __HAL_RCC_GPIOC_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
@@ -502,27 +519,46 @@ void TsReadMLX90615(void const * argument)
 {
   /* USER CODE BEGIN TsReadMLX90615 */
   /* Infinite loop */
-  for(;;)
-  {
-    osDelay(1);
-    /*
-    	for (cmd=0x10; cmd<0x30; cmd++) {
+	for(;;) {
+		uint8_t cmd = 0x27;
+		HAL_StatusTypeDef rc;
+		uint16_t a[3];
 
-    		rc = HAL_I2C_Master_Transmit(&hi2c2, 0xb6, &cmd, 1, 1000);
-    //		printf("I2C-Transmit: rc = %d\r\n", rc);
-    		rc = HAL_I2C_Master_Receive(&hi2c2, 0xb7, &T0raw[0], 3, 1000);
-    //		printf("I2C-Receive: rc = %d\r\n", rc);
+		ulTaskNotifyTake( pdTRUE, portMAX_DELAY );
 
-    		printf("%02x: %02x %02x %02x\r\n", cmd, T0raw[0], T0raw[1], T0raw[2]);
+		if( xSemaphoreTake( mtI2C2, ( TickType_t ) 200 ) == pdTRUE ) {
+
+//    	for (cmd=0x10; cmd<0x30; cmd++) {
+
+			rc =  HAL_I2C_Mem_Read(&hi2c2, 0xb6, &cmd, I2C_MEMADD_SIZE_16BIT, &a[0], 1, 1000);
+
+
+//			rc = HAL_I2C_Master_Transmit(&hi2c2, 0xb6, &cmd, 1, 20);
+			xSemaphoreGive( mtI2C2 );
+			if (rc!=0) {
+				printf("HAL_I2C_Mem_Read: rc = %d   i2c-errorcode = %d\r\n", rc, hi2c2.ErrorCode);
+				}
+/*
+			rc = HAL_I2C_Master_Receive(&hi2c2, 0xb7, &a[0], 3, 1000);
+			xSemaphoreGive( mtI2C2 );
+			if (rc!=0) {
+				printf("I2C-Receive: rc = %d\r\n", rc);
+				continue;
+				}
+*/
+    		printf("%02x: %04x %04x %04x\r\n", cmd, a[0], a[1], a[2]);
+
+			}
+
 
     //	uint16_t tmp = T0raw[0];
     //	tmp = tmp + (T0raw[1]<<8);
 
     //	T0 = (double)tmp * 0.02 - 273.15;
-*/
 
 
-  }
+
+		}
   /* USER CODE END TsReadMLX90615 */
 }
 
@@ -535,6 +571,7 @@ void Callback01(void const * argument)
 	xTaskNotifyGive(RTOSStatisticsHandle);
 	xTaskNotifyGive(ReadHIH8000Handle);
 	xTaskNotifyGive(EchoTaskHandle);
+	xTaskNotifyGive(ReadMLX90615Handle);
 
   /* USER CODE END Callback01 */
 }

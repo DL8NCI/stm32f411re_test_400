@@ -21,6 +21,7 @@ void ReadHIH8000Impl(void const * argument);
 static I2C_HandleTypeDef *_hi2c;
 static EventGroupHandle_t EgHandle;
 
+extern SemaphoreHandle_t mtI2C2;
 
 /**
   * @brief  Initialize HIH8000 access
@@ -66,29 +67,33 @@ void ReadHIH8000Impl(void const * argument) {
 
 		ulTaskNotifyTake( pdTRUE, portMAX_DELAY );
 
-		xEventGroupClearBits(EgHandle, EG_I2C_CMD_SENT | EG_I2C_DATA_RECEIVED);
+		if( xSemaphoreTake( mtI2C2, ( TickType_t ) 200 ) == pdTRUE ) {
 
-		b[0] = 0x00;
-		rc = HAL_I2C_Master_Transmit_IT(_hi2c, 0x4e, &b[0], 1);
-		configASSERT( rc == HAL_OK );
+			xEventGroupClearBits(EgHandle, EG_I2C_CMD_SENT | EG_I2C_DATA_RECEIVED);
 
-		bits = xEventGroupWaitBits(EgHandle, EG_I2C_CMD_SENT, pdTRUE, pdFALSE, 1000);
-		configASSERT((bits & EG_I2C_CMD_SENT)!=0);
-		vTaskDelay(100);
+			b[0] = 0x00;
+			rc = HAL_I2C_Master_Transmit_IT(_hi2c, 0x4e, &b[0], 1);
+			configASSERT( rc == HAL_OK );
 
-		rc = HAL_I2C_Master_Receive_IT(_hi2c, 0x4f, &b[0], 4);
-		configASSERT( rc == HAL_OK );
-		bits = EG_I2C_DATA_RECEIVED & xEventGroupWaitBits(EgHandle, EG_I2C_DATA_RECEIVED, pdTRUE, pdFALSE, 1000);
-		configASSERT(bits!=0);
+			bits = xEventGroupWaitBits(EgHandle, EG_I2C_CMD_SENT, pdTRUE, pdFALSE, 1000);
+			configASSERT((bits & EG_I2C_CMD_SENT)!=0);
+			vTaskDelay(100);
 
-		humidity = (((uint16_t)b[0] & 0x003f) << 8) | (uint16_t)b[1];
-		humidity = humidity/163.820;;
+			rc = HAL_I2C_Master_Receive_IT(_hi2c, 0x4f, &b[0], 4);
+			configASSERT( rc == HAL_OK );
+			bits = EG_I2C_DATA_RECEIVED & xEventGroupWaitBits(EgHandle, EG_I2C_DATA_RECEIVED, pdTRUE, pdFALSE, 1000);
+			configASSERT(bits!=0);
 
-		temperature = ((uint16_t)b[2]<<6) | ((uint16_t)b[3]>>2);
-		temperature = temperature*165.0/16382.0 - 40.0;
+			humidity = (((uint16_t)b[0] & 0x003f) << 8) | (uint16_t)b[1];
+			humidity = humidity/163.820;;
 
-		printf("RH = %4.1f %%   T = %4.1f deg\r\n", humidity, temperature);
+			temperature = ((uint16_t)b[2]<<6) | ((uint16_t)b[3]>>2);
+			temperature = temperature*165.0/16382.0 - 40.0;
 
+			printf("RH = %4.1f %%   T = %4.1f deg\r\n", humidity, temperature);
+
+			xSemaphoreGive( mtI2C2 );
+			}
 		}
 	}
 
